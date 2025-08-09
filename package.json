@@ -2,6 +2,9 @@
   "name": "snackstack-fullstack",
   "version": "1.0.0",
   "description": "SnackStack MERN Application",
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
     "start": "concurrently \"npm run backend\" \"npm run frontend\"",
     "backend": "cd backend && npm start",
