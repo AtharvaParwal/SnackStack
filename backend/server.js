@@ -10,7 +10,28 @@ const PORT = process.env.PORT || 8000;
 const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/foodDeliveryDB";
 
 // Middleware
-app.use(cors({ origin: process.env.FRONTEND_URL, methods: ["GET", "POST", "PUT", "DELETE"] }));
+const allowedOrigins = [
+    'http://localhost:3000',
+    'https://snack-stack-y5mj.vercel.app',
+    process.env.FRONTEND_URL
+].filter(Boolean);
+
+app.use(cors({ 
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.log('CORS blocked origin:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -45,7 +66,24 @@ app.use("/statistics", require("./routes/Statistics"));
 
 // Health check endpoint
 app.get("/", (req, res) => {
-    res.send({ status: "Server is running" });
+    res.send({ 
+        status: "Server is running",
+        allowedOrigins: [
+            'http://localhost:3000',
+            'https://snack-stack-y5mj.vercel.app',
+            process.env.FRONTEND_URL
+        ].filter(Boolean),
+        frontendUrl: process.env.FRONTEND_URL
+    });
+});
+
+// CORS test endpoint
+app.get("/cors-test", (req, res) => {
+    res.json({ 
+        message: "CORS is working!", 
+        origin: req.headers.origin,
+        timestamp: new Date().toISOString()
+    });
 });
 
 // Start server
