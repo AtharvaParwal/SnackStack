@@ -60,8 +60,8 @@ class EmailNotificationService {
                 await transporter.sendMail(emailContent);
                 console.log(`[EMAIL] Order Confirmation sent to ${orderData.email}`);
             } else {
-                console.log(`📧 [EMAIL] Order Confirmation sent to ${orderData.email}`);
-                console.log(`   ⚠️  Gmail not configured - Set GMAIL_USER and GMAIL_APP_PASSWORD environment variables`);
+                console.log(`[EMAIL] Order Confirmation sent to ${orderData.email}`);
+                console.log(`Gmail not configured - Set GMAIL_USER and GMAIL_APP_PASSWORD environment variables`);
             }
             
             console.log(`   Order ID: ${orderData._id}`);
@@ -151,8 +151,8 @@ class EmailNotificationService {
                 await transporter.sendMail(emailContent);
                 console.log(`[EMAIL] Status Update sent to ${orderData.email}`);
             } else {
-                console.log(`📧 [EMAIL] Status Update sent to ${orderData.email}`);
-                console.log(`   ⚠️  Gmail not configured - Set GMAIL_USER and GMAIL_APP_PASSWORD environment variables`);
+                console.log(`[EMAIL] Status Update sent to ${orderData.email}`);
+                console.log(`Gmail not configured - Set GMAIL_USER and GMAIL_APP_PASSWORD environment variables`);
             }
             
             console.log(`   Order ID: ${orderData._id}`);
@@ -218,8 +218,8 @@ class EmailNotificationService {
                 await transporter.sendMail(emailContent);
                 console.log(`[EMAIL] New Order Alert sent to vendor: ${vendorData.email}`);
             } else {
-                console.log(`📧 [EMAIL] New Order Alert sent to vendor: ${vendorData.email}`);
-                console.log(`   ⚠️  Gmail not configured - Set GMAIL_USER and GMAIL_APP_PASSWORD environment variables`);
+                console.log(`[EMAIL] New Order Alert sent to vendor: ${vendorData.email}`);
+                console.log(`Gmail not configured - Set GMAIL_USER and GMAIL_APP_PASSWORD environment variables`);
             }
             
             console.log(`   Shop: ${vendorData.shopName}`);
@@ -299,8 +299,8 @@ class EmailNotificationService {
                 await transporter.sendMail(emailContent);
                 console.log(`[EMAIL] Payment Notification sent to ${email}`);
             } else {
-                console.log(`📧 [EMAIL] Payment Notification sent to ${email}`);
-                console.log(`   ⚠️  Gmail not configured - Set GMAIL_USER and GMAIL_APP_PASSWORD environment variables`);
+                console.log(`[EMAIL] Payment Notification sent to ${email}`);
+                console.log(`Gmail not configured - Set GMAIL_USER and GMAIL_APP_PASSWORD environment variables`);
             }
             
             console.log(`   Type: ${type.toUpperCase()}`);

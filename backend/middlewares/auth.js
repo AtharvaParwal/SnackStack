@@ -1,8 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { Buyer, Vendor } = require('../models/Users');
 
-// JWT Secret - In production, this should be in environment variables
-const JWT_SECRET = process.env.JWT_SECRET || 'snackstack_secret_key_2025';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // Generate JWT Token
 const generateToken = (user, userType) => {

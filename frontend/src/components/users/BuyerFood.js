@@ -984,15 +984,6 @@ const BuyerFood = (props) => {
             <ListItem divider>
               <FormControl>
                 <FormLabel id="demo-controlled-radio-buttons-group">Veg / Non Veg</FormLabel>
-                {/* <RadioGroup
-                  aria-labelledby="demo-controlled-radio-buttons-group"
-                  name="controlled-radio-buttons-group"
-                  value={radio_value}
-                  onChange={radio_handleChange}
-                >
-                  <FormControlLabel value="Veg" control={<Radio />} label="Veg" />
-                  <FormControlLabel value="Non-Veg" control={<Radio />} label="Non-Veg" />
-                </RadioGroup> */}
                 <FormGroup >
                   <FormControlLabel control={<Checkbox checked={vegnonvegCheck[0]} />} label={"Veg"} onChange={onChangeVeg} disabled={filter_lock} />
                   <FormControlLabel control={<Checkbox checked={vegnonvegCheck[1]} />} label={"Non-Veg"} onChange={onChangeNonVeg} disabled={filter_lock} />
@@ -1064,34 +1055,8 @@ const BuyerFood = (props) => {
 
         <Grid item xs={12} md={9} lg={9}>
           <Paper>
-            {/* <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell> Sr No.</TableCell>
-                  <TableCell>
-                    {" "}
-                    <Button onClick={sortChange}>
-                      {sortName ? <ArrowDownwardIcon /> : <ArrowUpwardIcon />}
-                    </Button>
-                    Name
-                  </TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Contact</TableCell>
-                  <TableCell>Age</TableCell>
-                  <TableCell>Batch</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody> */}
             {foodItems.map((food, ind) => (
-              // <TableRow key={ind}>
-              //   <TableCell>{ind + 1}</TableCell>
-              //   <TableCell>{food.name}</TableCell>
-              //   <TableCell>{food.email}</TableCell>
-              //   <TableCell>{food.contact}</TableCell>
-              //   <TableCell>{food.age}</TableCell>
-              //   <TableCell>{food.batchNumber}</TableCell>
-              // </TableRow>
-
+            
               <Accordion expanded={expanded === ('panel' + ind.toString())} onChange={handleChange('panel' + ind.toString())} disabled={
                 !shopopen[food.canteen]
               } hidden={!filter[food._id]}>
