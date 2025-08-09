@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { getUserProfile, isAuthenticated } from "../../utils/auth";
+import { API_ENDPOINTS } from "../../config/api";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Rating from "@mui/material/Rating";
@@ -12,14 +14,14 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SaveIcon from '@mui/icons-material/Save';
 import Fab from '@mui/material/Fab';
-import { Box, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, TextField, Grid, Button, Paper } from "@mui/material";
+import { Box, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, TextField, Grid, Button } from "@mui/material";
 import { FormControl, FormLabel, RadioGroup, FormControlLabel, Radio } from "@mui/material";
-import { pink, red, green } from '@mui/material/colors';
+import { red, green } from '@mui/material/colors';
 import AddIcon from '@mui/icons-material/Add';
 
 const VendorFood = () => {
-
-    const email = localStorage.getItem("user").replace(/"/g, "");
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
     const [foods, setFoods] = useState([]);
     const [canteen, setCanteen] = useState("");
     const [edit, setEdit] = useState(true);
@@ -39,35 +41,45 @@ const VendorFood = () => {
 
 
     useEffect(() => {
-        const foodInfo = {
-            email: email
+        const fetchUserData = async () => {
+            try {
+                setLoading(true);
+                
+                // Get user profile
+                const profileResult = await getUserProfile();
+                if (profileResult.success) {
+                    setUser(profileResult.user);
+                    setCanteen(profileResult.user.shopName);
+                } else {
+                    console.error("Failed to fetch user profile");
+                }
+                
+                // Fetch food items
+                const foodResponse = await axios.get(API_ENDPOINTS.FOOD_ITEMS);
+                setFoods(foodResponse.data);
+                
+            } catch (error) {
+                console.error("Error fetching data:", error);
+            } finally {
+                setLoading(false);
+            }
         };
-        axios
-            .post("api/user/findvendor", foodInfo)
-            .then((response) => {
-                setCanteen(response.data.shopName);
-            })
-            .catch((error) => {
-                console.log(error);
-            });
 
-        axios
-            .get("api/food/fooditems")
-            .then((response) => {
-                setFoods(response.data);
-            })
-            .catch((error) => {
-                console.log(error);
-            });
+        if (isAuthenticated()) {
+            fetchUserData();
+        } else {
+            setLoading(false);
+        }
     }, [reload]);
 
     useEffect(() => {
-        foods.forEach((food) => {
-            if (food.shopName === canteen) {
-                setDial(dial.concat([false]));
-            }
-        });
-    }, [foods.length]);
+        if (foods.length > 0 && canteen) {
+            const newDial = foods.map((food) => {
+                return food.canteen === canteen ? false : dial[foods.indexOf(food)] || false;
+            });
+            setDial(newDial);
+        }
+    }, [foods.length, canteen]); // Added canteen dependency and simplified logic
 
     const opendialog = (index) => {
 
@@ -134,18 +146,7 @@ const VendorFood = () => {
         setPrice(event.target.value);
     };
 
-    const onChangeRating = (event) => {
-        setRating(event.target.value);
-    };
-
-
-    const onChangeAddon = (event) => {
-        setAddon(event.target.value);
-    };
-
-    const onChangeTags = (event) => {
-        setTags(event.target.value);
-    };
+    // Removed unused functions onChangeRating, onChangeAddon, onChangeTags
 
     const openAddForm = () => {
 
@@ -175,7 +176,7 @@ const VendorFood = () => {
         };
         console.log(foodInfo);
         axios
-            .post("api/food/addfooditems", foodInfo)
+            .post(API_ENDPOINTS.API_BASE_URL + "/food/addfooditems", foodInfo)
             .then((response) => {
                 setAddform(false);
                 setReload(reload + 1);
@@ -238,7 +239,7 @@ const VendorFood = () => {
         };
         console.log(data);
         axios
-            .post("api/food/updatefooditem", data)
+            .post(API_ENDPOINTS.API_BASE_URL + "/food/updatefooditem", data)
             .then((response) => {
                 console.log(response);
                 setReload(reload + 1);
@@ -256,7 +257,7 @@ const VendorFood = () => {
             _id: ID
         };
         axios
-            .post("api/food/deletefooditem", data)
+            .post(API_ENDPOINTS.API_BASE_URL + "/food/deletefooditem", data)
             .then((response) => {
                 console.log(response);
                 setReload(reload + 1);
@@ -302,12 +303,20 @@ const VendorFood = () => {
 
     return (
         <div>
-            <Typography sx={{ textAlign: 'center' }} variant="h3" gutterBottom>
-                Food Items
-            </Typography>
-            {foods.map((food, index) => {
-                if (food.canteen === canteen) {
-                    return (
+            {loading ? (
+                <Typography sx={{ textAlign: 'center' }} variant="h4" gutterBottom>
+                    Loading...
+                </Typography>
+            ) : !user ? (
+                <Typography sx={{ textAlign: 'center' }} variant="h4" gutterBottom>
+                    Please log in to access this page.
+                </Typography>
+            ) : (
+                <>
+                    <Typography sx={{ textAlign: 'center' }} variant="h3" gutterBottom>
+                        Food Items
+                    </Typography>
+            {foods.filter(food => food.canteen === canteen).map((food, index) => (
                         <div>
                             <Stack key={index} direction="row" sx={{ marginTop: "2%" }} spacing={3}>
                                 <ListItem divider>
@@ -316,7 +325,7 @@ const VendorFood = () => {
                                         <Stack direction="column" spacing={2}>
                                             <Stack spacing={3} direction="row">
                                                 <Typography sx={{ width: '5%', flexShrink: 0 }}>
-                                                    {food.veg ? <img src={veg} /> : <img src={nonveg} />}
+                                                    {food.veg ? <img src={veg} alt="Vegetarian" /> : <img src={nonveg} alt="Non-Vegetarian" />}
                                                 </Typography>
                                                 <Typography sx={{ width: '20%', flexShrink: 0 }} variant="h6">
                                                     {food.name}
@@ -422,10 +431,7 @@ const VendorFood = () => {
 
                             </Stack>
                         </div>
-                    );
-                }
-            })
-            }
+                    ))}
             <Fab sx={{
                 position: 'sticky',
                 bottom: 16,
@@ -503,7 +509,9 @@ const VendorFood = () => {
                     </Button>
                 </DialogActions>
             </Dialog>
-        </div >);
+                </>
+            )}
+        </div>);
 }
 
 export default VendorFood;

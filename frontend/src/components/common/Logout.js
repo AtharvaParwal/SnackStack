@@ -1,9 +1,3 @@
-const logout = () => {
-    localStorage.removeItem('user');
-    localStorage.removeItem('userType');
-    localStorage.setItem('status', 'loggedOut');
-
-    window.location = "/";
-}
+import { logout } from "../../utils/auth";
 
 export default logout;

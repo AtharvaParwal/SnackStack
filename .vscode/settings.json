@@ -1,0 +1,8 @@
+{
+    "js/ts.preferences.includePackageJsonAutoImports": "off",
+    "typescript.suggest.autoImports": false,
+    "javascript.suggest.autoImports": false,
+    "typescript.preferences.includePackageJsonAutoImports": "off",
+    "javascript.validate.enable": false,
+    "typescript.validate.enable": false
+}

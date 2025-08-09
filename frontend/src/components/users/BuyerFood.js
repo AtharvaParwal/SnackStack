@@ -1,5 +1,7 @@
 import { useState, useEffect, forwardRef } from "react";
 import axios from "axios";
+import { getUserProfile, isAuthenticated } from "../../utils/auth";
+import { API_ENDPOINTS } from "../../config/api";
 import Paper from "@mui/material/Paper";
 import Grid from "@mui/material/Grid";
 import TableCell from "@mui/material/TableCell";
@@ -82,53 +84,42 @@ function get_current_time() {
 }
 
 function check_if_shop_open(open_time, close_time) {
-  var open_tim_min = open_time.split(":")[1];
-  var open_tim_hr = open_time.split(":")[0];
-  var close_tim_min = close_time.split(":")[1];
-  var close_tim_hr = close_time.split(":")[0];
-  var current_time = get_current_time();
-  var current_tim_min = current_time.split(":")[1];
-  var current_tim_hr = current_time.split(":")[0];
+  try {
+    if (!open_time || !close_time) {
+      console.log("Invalid shop timings:", open_time, close_time);
+      return true; // Default to open if timing data is invalid
+    }
 
-  if (open_tim_hr > close_tim_hr) {
-    if (current_tim_hr === close_tim_hr && current_tim_min > close_tim_min)
-      return false
-    else if (current_tim_hr > close_tim_hr && current_tim_hr < open_tim_hr) {
-      return false
-    }
-    else if (current_tim_hr === close_tim_hr && current_tim_min < open_tim_min)
-      return false
-    else
-      return true
-  }
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTime = currentHour * 60 + currentMinute; // Convert to minutes since midnight
 
-  if (current_tim_hr < open_tim_hr) {
-    return false;
-  } else if (current_tim_hr > close_tim_hr) {
-    return false;
-  } else if (current_tim_hr == open_tim_hr && current_tim_hr == close_tim_hr) {
-    if (current_tim_min < open_tim_min || current_tim_min > close_tim_min) {
-      return false;
+    // Parse open time
+    const [openHour, openMinute] = open_time.split(":").map(Number);
+    const openTimeMinutes = openHour * 60 + openMinute;
+
+    // Parse close time
+    const [closeHour, closeMinute] = close_time.split(":").map(Number);
+    const closeTimeMinutes = closeHour * 60 + closeMinute;
+
+    console.log(`Current time: ${currentHour}:${currentMinute.toString().padStart(2, '0')} (${currentTime} min)`);
+    console.log(`Shop hours: ${open_time} (${openTimeMinutes} min) - ${close_time} (${closeTimeMinutes} min)`);
+
+    // Handle overnight shops (e.g., 20:00 to 06:00)
+    if (closeTimeMinutes < openTimeMinutes) {
+      const isOpen = currentTime >= openTimeMinutes || currentTime <= closeTimeMinutes;
+      console.log(`Overnight shop: ${isOpen ? 'OPEN' : 'CLOSED'}`);
+      return isOpen;
     } else {
-      return true;
+      // Normal day hours (e.g., 09:00 to 18:00)
+      const isOpen = currentTime >= openTimeMinutes && currentTime <= closeTimeMinutes;
+      console.log(`Day shop: ${isOpen ? 'OPEN' : 'CLOSED'}`);
+      return isOpen;
     }
-  }
-  else if (current_tim_hr == open_tim_hr) {
-    if (current_tim_min < open_tim_min) {
-      return false;
-    } else {
-      return true;
-    }
-  }
-  else if (current_tim_hr == close_tim_hr) {
-    if (current_tim_min > close_tim_min) {
-      return false;
-    } else {
-      return true;
-    }
-  }
-  else {
-    return true;
+  } catch (error) {
+    console.error("Error checking shop timing:", error);
+    return true; // Default to open on error
   }
 }
 
@@ -138,13 +129,17 @@ const Alert = forwardRef(function Alert(props, ref) {
 });
 
 const BuyerFood = (props) => {
-  const [user, setUser] = useState();
+    const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [sortedUsers, setSortedUsers] = useState([]);
   const [sortBy, setSortBy] = useState("");
   const [searchText, setSearchText] = useState("");
   const [foodItems, setFoodItems] = useState([]);
   const [defaultFoodItems, setDefaultFoodItems] = useState([]);
   const [backupFoodItems, setBackupFoodItems] = useState([]);
+  const [filteredFoodItems, setFilteredFoodItems] = useState([]);
+  const [canteenList, setCanteenList] = useState([]);
+  const [shopTiming, setShopTiming] = useState({});
   const [quantity_array, setQuantity_array] = useState([]);
   const [amount_array, setAmount_array] = useState([]);
   const [addon_array, setAddon_array] = useState([]);
@@ -247,82 +242,77 @@ const BuyerFood = (props) => {
     setError_bar(false);
   };
 
-  const email = localStorage.getItem("user").replace(/"/g, "");
-
   useEffect(() => {
-    const userInfo = {
-      email: email
-    }
-    axios
-      .post("api/user/findbuyer", userInfo)
-      .then((response) => {
-        setUser(response.data);
-        // console.log(response.data);
-      })
-      .catch((error) => {
-        console.log(error);
-      });
-
-    axios
-      .get("api/user/vendors")
-      .then((response) => {
-        setNumshops(response.data.length);
+    const fetchUserData = async () => {
+      try {
+        setLoading(true);
+        
+        // Get user profile
+        const profileResult = await getUserProfile();
+        if (profileResult.success) {
+          setUser(profileResult.user);
+        } else {
+          console.error("Failed to fetch user profile");
+        }
+        
+        // Fetch vendors
+        const vendorsResponse = await axios.get(API_ENDPOINTS.API_BASE_URL + "/user/vendors");
+        setNumshops(vendorsResponse.data.length);
         let temp_dict = {};
         let temp_list = [];
-        for (let i = 0; i < response.data.length; i++) {
-          temp_dict[response.data[i].shopName] = check_if_shop_open(response.data[i].openTime, response.data[i].closeTime);
-          temp_list.push(response.data[i].shopName);
-        };
-
+        vendorsResponse.data.forEach((vendor) => {
+          const isOpen = check_if_shop_open(vendor.openTime, vendor.closeTime);
+          console.log(`Shop ${vendor.shopName}: ${vendor.openTime}-${vendor.closeTime} = ${isOpen ? 'OPEN' : 'CLOSED'}`);
+          temp_dict[vendor.shopName] = isOpen;
+          temp_list.push(vendor.shopName);
+        });
         setShopopen(temp_dict);
         setCanteens(temp_list);
         setShopNames(temp_list);
-        // console.log(response.data);
-      })
-      .catch((error) => {
-        console.log(error);
-      })
-      .finally(() => {
 
-        axios
-          .get("api/food/fooditems")
-          .then((response) => {
-            setFoodItems(response.data);
-            setDefaultFoodItems(response.data);
-            setSearchText("");
-            let tag_list = [];
-            for (let i = 0; i < response.data.length; i++) {
-              response.data[i].tags.forEach(tag => {
-                if (!tag_list.includes(tag)) {
-                  tag_list.push(tag);
-                }
-              });
+        // Fetch food items
+        const foodResponse = await axios.get(API_ENDPOINTS.FOOD_ITEMS);
+        setFoodItems(foodResponse.data);
+        setDefaultFoodItems(foodResponse.data);
+        setFilteredFoodItems(foodResponse.data);
+        
+        // Process tags
+        let tag_list = [];
+        foodResponse.data.forEach(item => {
+          item.tags.forEach(tag => {
+            if (!tag_list.includes(tag)) {
+              tag_list.push(tag);
             }
+          });
+        });
+        
+        // Set max price
+        let Max = Math.max(...foodResponse.data.map(item => item.price));
+        setMax_price(Max);
+        setRange([0, Max]);
+        
+        setAlltags(tag_list);
+        setTags(tag_list);
+        
+        // Initialize filter
+        let filter_dict = {};
+        foodResponse.data.forEach(item => {
+          filter_dict[item._id] = true;
+        });
+        setFilter(filter_dict);
+        
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-            let Max = 0;
-            for (let i = 0; i < response.data.length; i++) {
-              if (response.data[i].price > Max) {
-                Max = response.data[i].price;
-              }
-            }
-            setMax_price(Max);
-            setRange([0, Max]);
-
-            console.log(tag_list);
-            setAlltags(tag_list);
-            setTags(tag_list);
-            let filter_dict = {};
-            for (let i = 0; i < response.data.length; i++) {
-              filter_dict[response.data[i]._id] = true;
-            }
-            setFilter(filter_dict);
-          })
-          .catch((error) => {
-            console.log(error);
-          })
-          .finally();
-
-      });
+    if (isAuthenticated()) {
+      fetchUserData();
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -457,50 +447,52 @@ const BuyerFood = (props) => {
       });
   };
 
-  const handleSetFav = (event, email, id) => {
+  const handleSetFav = (event, id) => {
     event.preventDefault();
-    // console.log(id);
+    if (!user) return;
+    
     user.favourites.push(id);
     setUser(user);
 
     const userInfo = {
-      email: email,
       favourites: user.favourites,
       name: user.name,
       contact: user.contact,
       batchNumber: user.batchNumber,
       age: user.age
     };
+    
+    // Use JWT-protected endpoint
     axios
-      .post("api/user/updatebuyer", userInfo)
+      .post(API_ENDPOINTS.UPDATE_BUYER, userInfo)
       .then((response) => {
-        // console.log(response.data);
+        console.log("Added to favourites:", response.data);
       })
       .catch((error) => {
         console.log(error);
       });
   };
 
-  const handleRemFav = (event, email, id) => {
+  const handleRemFav = (event, id) => {
     event.preventDefault();
-    // console.log(id);
+    if (!user) return;
+    
     user.favourites.splice(user.favourites.indexOf(id), 1);
     setUser(user);
 
-
-    // update user in database
     const userInfo = {
-      email: email,
       favourites: user.favourites,
       name: user.name,
       contact: user.contact,
       batchNumber: user.batchNumber,
       age: user.age
     };
+    
+    // Use JWT-protected endpoint
     axios
-      .post("api/user/updatebuyer", userInfo)
+      .post(API_ENDPOINTS.UPDATE_BUYER, userInfo)
       .then((response) => {
-        // console.log(response.data);
+        console.log("Removed from favourites:", response.data);
       })
       .catch((error) => {
         console.log(error);
@@ -744,8 +736,18 @@ const BuyerFood = (props) => {
 
 
 
-  const handleBuy = (event, food, index) => {
+  const handleBuy = async (event, food, index) => {
     event.preventDefault();
+    if (!user) {
+      setErr_msg("User not authenticated. Please log in again.");
+      setError_bar(true);
+      return;
+    }
+    
+    console.log("Current user:", user);
+    console.log("Auth token exists:", !!localStorage.getItem('authToken'));
+    console.log("User type:", localStorage.getItem('userType'));
+    
     var total = 0;
     if (quantity_array[index] == 0) {
       setErr_msg("Please select quantity");
@@ -755,67 +757,78 @@ const BuyerFood = (props) => {
 
     total = amount_array[index] * quantity_array[index];
 
-    const walletInfo = {
-      email: email
-    };
-    var flag = 0;
-    axios
-      .post("api/wallet/getbalance", walletInfo)
-      .then((response) => {
-        if (response.data < total) {
-          setErr_msg("Insufficient balance");
-          setError_bar(true);
-          flag = 1;
+    try {
+      // Check wallet balance using JWT-protected endpoint
+      const balanceResponse = await axios.get(API_ENDPOINTS.GET_BALANCE);
+      if (balanceResponse.data.balance < total) {
+        setErr_msg("Insufficient balance");
+        setError_bar(true);
+        return;
+      }
+
+      // Place order using JWT-protected endpoint
+      const orderInfo = {
+        item: food.name,
+        canteen: food.canteen,
+        quantity: quantity_array[index],
+        cost: total,
+        rating: food.rating,
+        item_id: food._id,
+        addons: addon_array[index] || []
+      };
+      
+      console.log("Placing order:", orderInfo);
+      const orderResponse = await axios.post(API_ENDPOINTS.API_BASE_URL + "/order/placeorder", orderInfo);
+      console.log("Order placed:", orderResponse.data);
+      
+      // Subtract from wallet using JWT-protected endpoint
+      const subtractResponse = await axios.post(API_ENDPOINTS.API_BASE_URL + "/wallet/subtractbalance", { amount: total });
+      console.log("Balance updated:", subtractResponse.data);
+      
+      // Update navbar balance if element exists
+      const balNavElement = document.getElementById('BalNav');
+      if (balNavElement) {
+        balNavElement.textContent = subtractResponse.data.balance;
+      }
+      
+      setOpen(true);
+      
+      // Refresh page after 2 seconds
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
+    } catch (error) {
+      console.error("Error processing order:", error);
+      
+      // More specific error messages
+      let errorMessage = "Failed to process order. Please try again.";
+      
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        console.error("Server responded with error:", error.response.status, error.response.data);
+        
+        if (error.response.status === 401) {
+          errorMessage = "Authentication failed. Please log in again.";
+        } else if (error.response.status === 403) {
+          errorMessage = "Access denied. Please check your permissions.";
+        } else if (error.response.data && error.response.data.error) {
+          errorMessage = error.response.data.error;
         }
-      })
-      .catch((error) => {
-        console.log(error);
-      })
-      .finally(() => {
-        if (flag == 0) {
-          const orderInfo = {
-            email: email,
-            item: food.name,
-            canteen: food.canteen,
-            quantity: quantity_array[index],
-            cost: total,
-            rating: food.rating,
-            item_id: food._id,
-            addons: addon_array[index]
-          };
-          console.log(orderInfo);
-          axios
-            .post("api/order/placeorder", orderInfo)
-            .then((response) => {
-              console.log(response.data);
-              const walletInfo = {
-                email: email,
-                balance: total
-              };
-              axios
-                .post("api/wallet/subtractbalance", walletInfo)
-                .then((response) => {
-                  console.log(response.data);
-                  document.getElementById('BalNav').innerHTML = response.data;
-                  setOpen(true);
-                }
-                )
-                .catch((error) => {
-                  console.log(error);
-                }
-                ).finally(() => {
-                  setTimeout(() => {
-                    window.location.reload();
-                  }, 2000);
-                });
-            })
-            .catch((error) => {
-              console.log(error);
-            }
-            );
-        }
-      });
-  }
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error("No response received:", error.request);
+        errorMessage = "Network error. Please check your connection.";
+      } else {
+        // Something happened in setting up the request
+        console.error("Request setup error:", error.message);
+        errorMessage = "Request failed: " + error.message;
+      }
+      
+      setErr_msg(errorMessage);
+      setError_bar(true);
+    }
+  };
 
   const printAddons = (addons, ind) => {
     let addonsList = [];
@@ -867,12 +880,12 @@ const BuyerFood = (props) => {
               </DialogTitle>
               <DialogContent>
                 <DialogContentText id="alert-dialog-description">
-                  {defaultFoodItems.map((food, index) => {
+                  {user && user.favourites && defaultFoodItems.map((food, index) => {
                     if (user.favourites.includes(food._id)) {
                       return (
                         <Stack key={index} direction="row" sx={{ marginTop: "2%" }}>
                           <Typography sx={{ width: '5%', flexShrink: 0 }}>
-                            {food.veg ? <img src={veg} /> : <img src={nonveg} />}
+                            {food.veg ? <img src={veg} alt="Vegetarian" /> : <img src={nonveg} alt="Non-Vegetarian" />}
                           </Typography>
                           <Typography sx={{ width: '25%', flexShrink: 0 }}>
                             {food.name}
@@ -1079,7 +1092,7 @@ const BuyerFood = (props) => {
               //   <TableCell>{food.batchNumber}</TableCell>
               // </TableRow>
 
-              < Accordion expanded={expanded === ('panel' + ind.toString())} onChange={handleChange('panel' + ind.toString())} disabled={
+              <Accordion expanded={expanded === ('panel' + ind.toString())} onChange={handleChange('panel' + ind.toString())} disabled={
                 !shopopen[food.canteen]
               } hidden={!filter[food._id]}>
                 <AccordionSummary
@@ -1088,7 +1101,7 @@ const BuyerFood = (props) => {
                   id={"panel" + ind.toString() + "bh-header"}
                 >
                   <Typography sx={{ width: '5%', flexShrink: 0 }}>
-                    {food.veg ? <img src={veg} /> : <img src={nonveg} />}
+                    {food.veg ? <img src={veg} alt="Vegetarian" /> : <img src={nonveg} alt="Non-Vegetarian" />}
                   </Typography>
                   <Typography sx={{ width: '25%', flexShrink: 0 }}>
                     {food.name}
@@ -1111,10 +1124,10 @@ const BuyerFood = (props) => {
                     </Stack>
                   </Typography>
                   <Typography sx={{ width: '5%', flexShrink: 0 }}>
-                    {user.favourites.includes(food._id) ? <Checkbox icon={<Favorite sx={{ color: pink[500] }} />} checkedIcon={<FavoriteBorder />} onClick={(e) => {
-                      handleRemFav(e, email, food._id);
+                    {user && user.favourites && user.favourites.includes(food._id) ? <Checkbox icon={<Favorite sx={{ color: pink[500] }} />} checkedIcon={<FavoriteBorder />} onClick={(e) => {
+                      handleRemFav(e, food._id);
                     }} /> : <Checkbox icon={<FavoriteBorder />} checkedIcon={<Favorite sx={{ color: pink[500] }} />} onClick={(e) => {
-                      handleSetFav(e, email, food._id);
+                      handleSetFav(e, food._id);
                     }} />}
                   </Typography>
                 </AccordionSummary>

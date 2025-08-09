@@ -1,5 +1,7 @@
 import { useState, useEffect, forwardRef } from "react";
 import axios from "axios";
+import { getUserProfile, isAuthenticated } from "../../utils/auth";
+import { API_ENDPOINTS } from "../../config/api";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Rating from "@mui/material/Rating";
@@ -10,16 +12,23 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SaveIcon from '@mui/icons-material/Save';
 import Fab from '@mui/material/Fab';
-import { Box, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, TextField, Grid, Button, Paper } from "@mui/material";
-import { FormControl, FormLabel, RadioGroup, FormControlLabel, Radio } from "@mui/material";
-import { pink, red, lightBlue } from '@mui/material/colors';
+import { Box, Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText, TextField, Grid, Button, Paper, Accordion, AccordionSummary, AccordionDetails, Select, MenuItem, FormControl, InputLabel } from "@mui/material";
+import { FormLabel, RadioGroup, FormControlLabel, Radio } from "@mui/material";
+import { pink, red, lightBlue, green, orange } from '@mui/material/colors';
 import AddIcon from '@mui/icons-material/Add';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
 import ClearIcon from '@mui/icons-material/Clear';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import LinearProgress from '@mui/material/LinearProgress';
+import Stepper from '@mui/material/Stepper';
+import Step from '@mui/material/Step';
+import StepLabel from '@mui/material/StepLabel';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { init, send } from '@emailjs/browser'
+import OrderTracker from './OrderTracker';
 init('user_vNBAStcuIRCdghDxao5wF' );
 
 // const statlib = require('../../middlewares/statistics');
@@ -29,10 +38,12 @@ const Alert = forwardRef(function Alert(props, ref) {
 });
 
 const BuyerOrder = () => {
-
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState([]);
     const [rating, setRating] = useState([]);
     const [open, setOpen] = useState(false);
+    const [expandedOrders, setExpandedOrders] = useState({});
 
     const handleClick = () => {
         setOpen(true);
@@ -42,47 +53,65 @@ const BuyerOrder = () => {
         if (reason === 'clickaway') {
             return;
         }
-
         setOpen(false);
     };
-    //remove quotes from email
-    const email = localStorage.getItem("user").replace(/"/g, "");
+
+    const handleOrderExpand = (orderId) => {
+        setExpandedOrders(prev => ({
+            ...prev,
+            [orderId]: !prev[orderId]
+        }));
+    };
 
     useEffect(() => {
-        const orderInfo = {
-            email: email
-        };
-        axios
-            .post("api/order/getorderbyemail", orderInfo)
-            .then((response) => {
-                setOrders(response.data);
-                let rating_array = [];
-                for (let i = 0; i < response.data.length; i++) {
-                    if (response.data[i].status === "READY FOR PICKUP") {
-                        rating_array.push(1);
-                    }
-                    else if (response.data[i].status === "COMPLETED" && response.data[i].rated === false) {
-                        rating_array.push(2);
-                    }
-                    else if (response.data[i].status === "COMPLETED" && response.data[i].rated === true) {
-                        rating_array.push(3);
-                    }
-                    else
-                        rating_array.push(0);
+        const fetchOrdersData = async () => {
+            try {
+                setLoading(true);
+                
+                // Get user profile
+                const profileResult = await getUserProfile();
+                if (profileResult.success) {
+                    setUser(profileResult.user);
+                    
+                    // Get orders using JWT-protected endpoint
+                    const ordersResponse = await axios.get(API_ENDPOINTS.API_BASE_URL + "/order/myorders");
+                    setOrders(ordersResponse.data);
+                } else {
+                    console.error("Failed to fetch user profile");
                 }
-                setRating(rating_array);
-            })
-            .catch((error) => {
-                console.log(error);
-            });
+                
+            } catch (error) {
+                console.error("Error fetching orders:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (isAuthenticated()) {
+            fetchOrdersData();
+        } else {
+            setLoading(false);
+        }
     }, []);
 
     const printAddons = (addons) => {
         let addonsList = [];
-        addons.forEach((addon) => {
-            addonsList.unshift(<Chip label={addon} color="warning" variant="outlined" sx={{ mr: 1 }} />);
+        addons.forEach((addon, index) => {
+            addonsList.push(<Chip key={index} label={addon} color="warning" variant="outlined" sx={{ mr: 1, mb: 1 }} />);
         });
         return addonsList;
+    };
+
+    const getStatusColor = (status) => {
+        const statusColors = {
+            'PLACED': 'info',
+            'ACCEPTED': 'primary',
+            'COOKING': 'warning',
+            'READY FOR PICKUP': 'secondary',
+            'COMPLETED': 'success',
+            'REJECTED': 'error'
+        };
+        return statusColors[status] || 'default';
     };
 
     const completeOrder = (e, order, ind) => {
@@ -92,19 +121,19 @@ const BuyerOrder = () => {
             status: "COMPLETED"
         };
         axios
-            .post("api/order/updatestatus", orderInfo)
+            .post(API_ENDPOINTS.UPDATE_ORDER_STATUS, orderInfo)
             .then((response) => {
                 console.log(response);
                 let rating_array = [...rating];
                 rating_array[ind] = 2;
                 setRating(rating_array);
+                // Refresh orders
+                window.location.reload();
             })
             .catch((error) => {
                 console.log(error);
             });
-
     };
-
 
     const updateRating = (e, value, order, ind) => {
         e.preventDefault();
@@ -114,7 +143,7 @@ const BuyerOrder = () => {
         };
         console.log(orderInfo);
         axios
-            .post("api/food/updaterating", orderInfo)
+            .post(API_ENDPOINTS.UPDATE_FOOD_RATING, orderInfo)
             .then((response) => {
                 console.log(response);
                 let rating_array = [...rating];
@@ -124,7 +153,7 @@ const BuyerOrder = () => {
                     id: order._id
                 }
                 axios
-                    .post("api/order/rated", info)
+                    .post(API_ENDPOINTS.MARK_ORDER_RATED, info)
                     .then((response) => {
                         console.log(response);
                         handleClick();
@@ -138,140 +167,169 @@ const BuyerOrder = () => {
             });
     };
 
-
+    if (loading) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" height="50vh">
+                <Typography variant="h6">Loading your orders...</Typography>
+            </Box>
+        );
+    }
 
     return (
-        <div>
+        <Box sx={{ maxWidth: 1200, margin: '0 auto', padding: 2 }}>
             <Typography sx={{ textAlign: 'center', paddingBottom: 4 }} variant="h3" gutterBottom>
                 My Orders
             </Typography>
-            <Stack spacing={3} direction="row">
-                <Typography sx={{ width: '9%', flexShrink: 0, ml: 2 }} variant="h5">
-                    Placed At
-                </Typography>
-                <Typography sx={{ width: '16%', flexShrink: 0 }} variant="h5">
-                    Name
-                </Typography>
-                <Typography sx={{ width: '5%', flexShrink: 0 }} variant="h5">
-                    Vendor
-                </Typography>
-                <Typography sx={{ width: '7%', flexShrink: 0 }} variant="h5" >
-                    Amount
-                </Typography>
-                <Typography sx={{ width: '7%', flexShrink: 0 }} variant="h5">
-                    Quantity
-                </Typography>
-                <Typography sx={{ width: '16%', flexShrink: 0 }} variant="h5">
-                    Rating
-                </Typography>
-                <Typography sx={{ width: '5%', flexShrink: 0 }} variant="h5">
-                    Status
-                </Typography>
-            </Stack>
-            {
-                orders.map((order, index) => {
-                    return (
-                        <div>
-                            <Stack key={index} direction="row" sx={{ marginTop: "2%" }} spacing={3}>
-                                <ListItem divider>
-                                    <Typography sx={{ width: '90%', flexShrink: 0 }}>
-                                        <Stack direction="column" spacing={2}>
-                                            <Stack spacing={3} direction="row">
-                                                <Typography sx={{ width: '10%', flexShrink: 0 }} variant="h6">
-                                                    {order.placedTime}
-                                                </Typography>
-                                                <Typography sx={{ width: '20%', flexShrink: 0 }} variant="h6">
-                                                    {order.item}
-                                                </Typography>
-                                                <Typography sx={{ width: '4%', flexShrink: 0 }} variant="h6">
-                                                    {order.canteen}
-                                                </Typography>
-                                                <Typography sx={{ width: '1%', flexShrink: 0 }}>
-                                                    <CurrencyRupeeIcon fontSize="small" sx={{ paddingTop: 0.9 }} />
-                                                </Typography>
-                                                <Typography sx={{ width: '8%', flexShrink: 0 }} variant="h6" >
-                                                    {order.cost}
-                                                </Typography>
-                                                <Typography sx={{ width: '5%', flexShrink: 0 }} variant="h6">
-                                                    {order.quantity}
-                                                </Typography>
-                                                <Typography sx={{ width: '15%', flexShrink: 0 }}>
-                                                    <Rating name="food-rating" value={order.rating} readOnly />
-                                                </Typography>
-                                                <Typography sx={{ width: '15%', flexShrink: 0 }} variant="h6">
-                                                    <Alert color={rating[index] === 2 || rating[index] === 3 ? "success" : order.status === "REJECTED" ? "error" : "info"} sx={{ width: '65%', justifyContent: 'center' }}>
-                                                        <Typography variant="h6">
-                                                            {rating[index] === 1 ? "READY FOR PICKUP" : rating[index] === 2 ? "COMPLETED" : rating[index] === 3 ? "COMPLETED" : order.status}
-                                                        </Typography>
-                                                    </Alert>
-                                                </Typography>
-                                                <Typography sx={{ width: '5%', flexShrink: 0 }} variant="h6" hidden={rating[index] === 1 ? false : true}>
-                                                    <Fab sx={{
-                                                        position: 'absolute',
-                                                        right: 80,
-                                                        top: 20,
-                                                        color: 'common.white',
-                                                        bgcolor: pink[600],
-                                                        '&:hover': {
-                                                            bgcolor: pink[800]
-                                                        }
-                                                    }} aria-label={"Pickup"} variant="extended" onClick={(e) => completeOrder(e, order, index)} >
-                                                        <ShoppingBagIcon sx={{ mr: 1 }} />
-                                                        Picked  up?
-                                                    </Fab>
-                                                </Typography>
-                                                <Typography sx={{ width: '15%', flexShrink: 0 }} variant="h6">
-                                                    <Stack spacing={1} direction="column">
-                                                        <Typography sx={{ width: '20%', flexShrink: 0 }} variant="h6" hidden={rating[index] === 2 ? false : true}>
-                                                            Rate Us
-                                                        </Typography>
-                                                        <Typography sx={{ width: '200%', flexShrink: 0 }} variant="h6" hidden={rating[index] === 3 ? false : true}>
-                                                            Thanks for rating us!
-                                                        </Typography>
-                                                        <Typography sx={{ width: '10%', flexShrink: 0 }} variant="h6" hidden={rating[index] === 2 ? false : true}>
-                                                            <Rating
-                                                                name="simple-controlled"
-                                                                defaultValue={0}
-                                                                onChange={(event, newValue) => {
-                                                                    updateRating(event, newValue, order, index);
-                                                                }}
-                                                            // disabled={rating[index] === 3 ? true : false}
-                                                            />
-                                                        </Typography>
-                                                    </Stack>
-                                                </Typography>
-                                            </Stack>
-                                            <Stack spacing={2} direction="row">
-                                                <Typography sx={{ width: '10%', flexShrink: 0 }} variant="h5">
-                                                    Addons :
-                                                </Typography>
-                                                {printAddons(order.addons)}
-                                            </Stack>
-                                        </Stack>
+            
+            {orders.length === 0 ? (
+                <Paper sx={{ p: 4, textAlign: 'center' }}>
+                    <Typography variant="h6" color="text.secondary">
+                        No orders found. Start ordering some delicious food!
+                    </Typography>
+                </Paper>
+            ) : (
+                orders.map((order, index) => (
+                    <Accordion 
+                        key={order._id} 
+                        expanded={expandedOrders[order._id] || false}
+                        onChange={() => handleOrderExpand(order._id)}
+                        sx={{ mb: 2, border: 1, borderColor: 'divider' }}
+                    >
+                        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                            <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
+                                    <Typography variant="h6" sx={{ minWidth: 200 }}>
+                                        {order.item}
                                     </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {order.canteen}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        ₹{order.cost}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Qty: {order.quantity}
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <Chip 
+                                        label={order.status} 
+                                        color={getStatusColor(order.status)}
+                                        variant="filled"
+                                    />
+                                    <Typography variant="body2" color="text.secondary">
+                                        {new Date(order.placedTime).toLocaleString()}
+                                    </Typography>
+                                </Box>
+                            </Box>
+                        </AccordionSummary>
+                        
+                        <AccordionDetails>
+                            <Grid container spacing={3}>
+                                <Grid item xs={12} md={6}>
+                                    <Paper sx={{ p: 2 }}>
+                                        <Typography variant="h6" gutterBottom>
+                                            Order Details
+                                        </Typography>
+                                        <Box sx={{ mb: 2 }}>
+                                            <Typography variant="body1" gutterBottom>
+                                                <strong>Item:</strong> {order.item}
+                                            </Typography>
+                                            <Typography variant="body1" gutterBottom>
+                                                <strong>Vendor:</strong> {order.canteen}
+                                            </Typography>
+                                            <Typography variant="body1" gutterBottom>
+                                                <strong>Quantity:</strong> {order.quantity}
+                                            </Typography>
+                                            <Typography variant="body1" gutterBottom>
+                                                <strong>Total Cost:</strong> ₹{order.cost}
+                                            </Typography>
+                                            <Typography variant="body1" gutterBottom>
+                                                <strong>Placed At:</strong> {new Date(order.placedTime).toLocaleString()}
+                                            </Typography>
+                                        </Box>
+                                        
+                                        {order.addons && order.addons.length > 0 && (
+                                            <Box sx={{ mb: 2 }}>
+                                                <Typography variant="body1" gutterBottom>
+                                                    <strong>Add-ons:</strong>
+                                                </Typography>
+                                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                                    {printAddons(order.addons)}
+                                                </Box>
+                                            </Box>
+                                        )}
 
-                                </ListItem>
-                            </Stack>
-                        </div>
-                    );
-                })
-            }
+                                        {order.status === 'READY FOR PICKUP' && (
+                                            <Button
+                                                variant="contained"
+                                                color="primary"
+                                                startIcon={<ShoppingBagIcon />}
+                                                onClick={(e) => completeOrder(e, order, index)}
+                                                sx={{ mb: 2 }}
+                                            >
+                                                Mark as Picked Up
+                                            </Button>
+                                        )}
+
+                                        {order.status === 'COMPLETED' && !order.rated && (
+                                            <Box sx={{ mt: 2 }}>
+                                                <Typography variant="body1" gutterBottom>
+                                                    Rate this order:
+                                                </Typography>
+                                                <Rating
+                                                    name={`rating-${order._id}`}
+                                                    defaultValue={0}
+                                                    onChange={(event, newValue) => {
+                                                        updateRating(event, newValue, order, index);
+                                                    }}
+                                                />
+                                            </Box>
+                                        )}
+
+                                        {order.rated && (
+                                            <Box sx={{ mt: 2 }}>
+                                                <Typography variant="body2" color="success.main">
+                                                    Thank you for rating this order!
+                                                </Typography>
+                                                <Rating
+                                                    name={`rating-readonly-${order._id}`}
+                                                    value={order.rating || 0}
+                                                    readOnly
+                                                />
+                                            </Box>
+                                        )}
+                                    </Paper>
+                                </Grid>
+                                
+                                <Grid item xs={12} md={6}>
+                                    <OrderTracker order={order} />
+                                </Grid>
+                            </Grid>
+                        </AccordionDetails>
+                    </Accordion>
+                ))
+            )}
+            
             <Snackbar open={open} autoHideDuration={3000} onClose={handleClose}>
                 <Alert onClose={handleClose} severity="success" sx={{ width: '100%' }}>
                     Order Rated Successfully!
                 </Alert>
             </Snackbar>
-        </div >
+        </Box>
     );
 }
 
 const VendorOrder = () => {
-
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState([]);
     const [status, setStatus] = useState([]);
     const [open, setOpen] = useState(false);
     const [erropen, setErropen] = useState(false);
     const [count, setCount] = useState(0);
+    const [expandedOrders, setExpandedOrders] = useState({});
+    const [statusFilter, setStatusFilter] = useState('ALL');
 
     const stat_index = {
         'PLACED': 0,
@@ -291,6 +349,28 @@ const VendorOrder = () => {
         'REJECTED'
     ]
 
+    const getStatusColor = (status) => {
+        const statusColors = {
+            'PLACED': 'warning',
+            'ACCEPTED': 'info',
+            'COOKING': 'primary',
+            'READY FOR PICKUP': 'secondary',
+            'COMPLETED': 'success',
+            'REJECTED': 'error'
+        };
+        return statusColors[status] || 'default';
+    };
+
+    const getNextStatusAction = (currentStatus) => {
+        const actions = {
+            'PLACED': 'Accept Order',
+            'ACCEPTED': 'Start Cooking',
+            'COOKING': 'Ready for Pickup',
+            'READY FOR PICKUP': 'Complete Order'
+        };
+        return actions[currentStatus] || null;
+    };
+
     const handleClick = () => {
         setOpen(true);
     };
@@ -303,54 +383,59 @@ const VendorOrder = () => {
         if (reason === 'clickaway') {
             return;
         }
-
         setOpen(false);
     };
-    //remove quotes from email
-    const email = localStorage.getItem("user").replace(/"/g, "");
+
+    const handleOrderExpand = (orderId) => {
+        setExpandedOrders(prev => ({
+            ...prev,
+            [orderId]: !prev[orderId]
+        }));
+    };
 
     useEffect(() => {
-        const vendorInfo = {
-            email: email
+        const fetchVendorOrders = async () => {
+            try {
+                setLoading(true);
+                
+                // Get user profile
+                const profileResult = await getUserProfile();
+                if (profileResult.success && profileResult.user.userType === 'Vendor') {
+                    setUser(profileResult.user);
+                    
+                    // Get vendor orders using JWT-protected endpoint
+                    const ordersResponse = await axios.get(API_ENDPOINTS.API_BASE_URL + "/order/vendororders");
+                    const ordersData = ordersResponse.data;
+                    setOrders(ordersData);
+                    
+                    // Initialize status array
+                    let status_array = [];
+                    for (let i = 0; i < ordersData.length; i++) {
+                        status_array.push(stat_index[ordersData[i].status]);
+                    }
+                    setStatus(status_array);
+                } else {
+                    console.error("User is not a vendor or failed to fetch profile");
+                }
+                
+            } catch (error) {
+                console.error("Error fetching vendor orders:", error);
+            } finally {
+                setLoading(false);
+            }
         };
-        axios
-            .post("api/user/findvendor", vendorInfo)
-            .then(res => {
-                // console.log(res.data.shopName);
-                const vendorOrders = {
-                    canteen: res.data.shopName
-                };
-                // console.log(vendorOrders);
-                axios
-                    .post("api/order/getorderbyvendor", vendorOrders)
-                    .then(response => {
-                        let status_array = [];
-                        var cnt = 0;
-                        for (let i = 0; i < response.data.length; i++) {
-                            status_array.push(stat_index[response.data[i].status]);
-                            if (stat_index[response.data[i].status] === 1 || stat_index[response.data[i].status] === 2) {
-                                cnt++;
-                            }
-                        }
-                        setCount(cnt);
-                        // console.log(response.data);
-                        setStatus(status_array);
-                        setOrders(response.data);
-                    })
-                    .catch((error) => {
-                        console.log(error);
-                    });
-            })
-            .catch(err => {
-                console.log(err);
-            })
 
+        if (isAuthenticated()) {
+            fetchVendorOrders();
+        } else {
+            setLoading(false);
+        }
     }, []);
 
     const printAddons = (addons) => {
         let addonsList = [];
-        addons.forEach((addon) => {
-            addonsList.unshift(<Chip label={addon} color="warning" variant="outlined" sx={{ mr: 1 }} />);
+        addons.forEach((addon, index) => {
+            addonsList.push(<Chip key={index} label={addon} color="warning" variant="outlined" sx={{ mr: 1, mb: 1 }} />);
         });
         return addonsList;
     };
@@ -368,7 +453,7 @@ const VendorOrder = () => {
             status: stat_names[status[ind] + 1]
         };
         axios
-            .post("api/order/updatestatus", orderInfo)
+            .post(API_ENDPOINTS.UPDATE_ORDER_STATUS, orderInfo)
             .then((response) => {
                 if (status[ind] === 0)
                     setCount(count + 1);
@@ -385,20 +470,22 @@ const VendorOrder = () => {
                         message: "Your order has been sucessfully accepted by the vendor. Please wait for the vendor to prepare the food. You can track the order status in the 'My Orders' section. Thank you for using Canteen Portal."
                     }
 
-
                     send("service_su4zcom", "template_tnyblq3", data).then(res => {
                         console.log(res);
-                    }
-                    ).catch(err => {
+                    }).catch(err => {
                         console.log(err);
                     });
                 }
                 setStatus(status_array);
+                
+                // Update the order in the orders array
+                const updatedOrders = [...orders];
+                updatedOrders[ind].status = stat_names[status_array[ind]];
+                setOrders(updatedOrders);
             })
             .catch((error) => {
                 console.log(error);
             });
-
     };
 
     const rejectOrder = (e, order, ind) => {
@@ -408,7 +495,7 @@ const VendorOrder = () => {
             status: "REJECTED"
         };
         axios
-            .post("api/order/updatestatus", orderInfo)
+            .post(API_ENDPOINTS.UPDATE_ORDER_STATUS, orderInfo)
             .then((response) => {
                 console.log(response);
                 let status_array = [...status];
@@ -421,11 +508,15 @@ const VendorOrder = () => {
                 }
                 send("service_su4zcom", "template_tnyblq3", data).then(res => {
                     console.log(res);
-                }
-                ).catch(err => {
+                }).catch(err => {
                     console.log(err);
                 });
                 setStatus(status_array);
+                
+                // Update the order in the orders array
+                const updatedOrders = [...orders];
+                updatedOrders[ind].status = "REJECTED";
+                setOrders(updatedOrders);
             })
             .catch((error) => {
                 console.log(error);
@@ -436,115 +527,262 @@ const VendorOrder = () => {
                     balance: order.cost
                 };
                 axios
-                    .post("api/wallet/addbalance", walletInfo)
+                    .post(API_ENDPOINTS.ADD_BALANCE, walletInfo)
                     .then((response) => {
                     })
                     .catch((error) => {
                         console.log(error);
-                    }
-                    );
+                    });
             });
-
     };
 
+    const updateOrderStatus = async (orderId, newStatus) => {
+        try {
+            const response = await axios.post(API_ENDPOINTS.UPDATE_ORDER_STATUS, {
+                id: orderId,
+                status: newStatus
+            });
+            
+            // Update local state
+            const updatedOrders = orders.map(order => 
+                order._id === orderId ? { ...order, status: newStatus } : order
+            );
+            setOrders(updatedOrders);
+            
+            // Send notification email for acceptance
+            if (newStatus === 'ACCEPTED') {
+                const order = orders.find(o => o._id === orderId);
+                const data = {
+                    email: order.email,
+                    status: newStatus,
+                    Vendor: order.canteen,
+                    message: "Your order has been accepted by the vendor. Please wait for the vendor to prepare the food. You can track the order status in the 'My Orders' section. Thank you for using Canteen Portal."
+                };
+                
+                send("service_su4zcom", "template_tnyblq3", data).catch(err => {
+                    console.log('Email notification failed:', err);
+                });
+            }
+            
+            handleClick();
+        } catch (error) {
+            console.error('Error updating order status:', error);
+        }
+    };
 
+    const filteredOrders = orders.filter(order => 
+        statusFilter === 'ALL' || order.status === statusFilter
+    );
+
+    if (loading) {
+        return (
+            <Box display="flex" justifyContent="center" alignItems="center" height="50vh">
+                <Typography variant="h6">Loading orders...</Typography>
+            </Box>
+        );
+    }
 
     return (
-        <div>
+        <Box sx={{ maxWidth: 1200, margin: '0 auto', padding: 2 }}>
             <Typography sx={{ textAlign: 'center', paddingBottom: 4 }} variant="h3" gutterBottom>
-                Recieved Orders
+                Received Orders
             </Typography>
-            <Stack spacing={3} direction="row">
-                <Typography sx={{ width: '15%', flexShrink: 0, ml: 2 }} variant="h5">
-                    Placed At
-                </Typography>
-                <Typography sx={{ width: '20%', flexShrink: 0 }} variant="h5">
-                    Name
-                </Typography>
-                <Typography sx={{ width: '20%', flexShrink: 0 }} variant="h5">
-                    Quantity
-                </Typography>
-                <Typography sx={{ width: '5%', flexShrink: 0 }} variant="h5">
-                    Status
-                </Typography>
+            
+            {/* Status Filter */}
+            <Box sx={{ mb: 3 }}>
+                <FormControl variant="outlined" sx={{ minWidth: 200 }}>
+                    <InputLabel>Filter by Status</InputLabel>
+                    <Select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        label="Filter by Status"
+                    >
+                        <MenuItem value="ALL">All Orders</MenuItem>
+                        <MenuItem value="PLACED">Placed</MenuItem>
+                        <MenuItem value="ACCEPTED">Accepted</MenuItem>
+                        <MenuItem value="COOKING">Cooking</MenuItem>
+                        <MenuItem value="READY FOR PICKUP">Ready for Pickup</MenuItem>
+                        <MenuItem value="COMPLETED">Completed</MenuItem>
+                        <MenuItem value="REJECTED">Rejected</MenuItem>
+                    </Select>
+                </FormControl>
+            </Box>
 
-            </Stack>
-            {
-                orders.map((order, index) => {
+            {filteredOrders.length === 0 ? (
+                <Paper sx={{ p: 4, textAlign: 'center' }}>
+                    <Typography variant="h6" color="text.secondary">
+                        {statusFilter === 'ALL' ? 
+                            'No orders found.' : 
+                            `No ${statusFilter.toLowerCase()} orders found.`
+                        }
+                    </Typography>
+                </Paper>
+            ) : (
+                filteredOrders.map((order, index) => {
+                    const actualIndex = orders.findIndex(o => o._id === order._id);
                     return (
-                        <div>
-                            <Stack key={index} direction="row" sx={{ marginTop: "2%" }} spacing={3}>
-                                <ListItem divider>
-                                    <Typography sx={{ width: '90%', flexShrink: 0 }}>
-                                        <Stack direction="column" spacing={2}>
-                                            <Stack spacing={3} direction="row">
-                                                <Typography sx={{ width: '17%', flexShrink: 0 }} variant="h6">
-                                                    {order.placedTime}
+                        <Accordion 
+                            key={order._id}
+                            expanded={expandedOrders[order._id] || false}
+                            onChange={() => handleOrderExpand(order._id)}
+                            sx={{ 
+                                mb: 2, 
+                                border: 1, 
+                                borderColor: 'divider',
+                                borderLeft: `4px solid ${
+                                    order.status === 'PLACED' ? orange[500] :
+                                    order.status === 'ACCEPTED' ? lightBlue[500] :
+                                    order.status === 'COOKING' ? orange[700] :
+                                    order.status === 'READY FOR PICKUP' ? lightBlue[700] :
+                                    order.status === 'COMPLETED' ? green[500] :
+                                    red[500]
+                                }`
+                            }}
+                        >
+                            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
+                                        <Typography variant="h6" sx={{ minWidth: 200 }}>
+                                            {order.item}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Customer: {order.email}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            ₹{order.cost}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Qty: {order.quantity}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                        <Chip 
+                                            label={order.status} 
+                                            color={getStatusColor(order.status)}
+                                            variant="filled"
+                                        />
+                                        <Typography variant="body2" color="text.secondary">
+                                            {new Date(order.placedTime).toLocaleString()}
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                            </AccordionSummary>
+                            
+                            <AccordionDetails>
+                                <Grid container spacing={3}>
+                                    <Grid item xs={12} md={6}>
+                                        <Paper sx={{ p: 2 }}>
+                                            <Typography variant="h6" gutterBottom>
+                                                Order Details
+                                            </Typography>
+                                            <Box sx={{ mb: 2 }}>
+                                                <Typography variant="body1" gutterBottom>
+                                                    <strong>Item:</strong> {order.item}
                                                 </Typography>
-                                                <Typography sx={{ width: '25%', flexShrink: 0 }} variant="h6">
-                                                    {order.item}
+                                                <Typography variant="body1" gutterBottom>
+                                                    <strong>Customer:</strong> {order.email}
                                                 </Typography>
-                                                <Typography sx={{ width: '17%', flexShrink: 0 }} variant="h6">
-                                                    {order.quantity}
+                                                <Typography variant="body1" gutterBottom>
+                                                    <strong>Quantity:</strong> {order.quantity}
                                                 </Typography>
-                                                <Typography sx={{ width: '15%', flexShrink: 0 }} variant="h6">
-                                                    <Alert color={status[index] === 4 ? "success" : status[index] === 5 ? "error" : "info"} sx={{ width: '65%', justifyContent: 'center' }}>
-                                                        <Typography variant="h6">
-                                                            {stat_names[status[index]]}
-                                                        </Typography>
-                                                    </Alert>
+                                                <Typography variant="body1" gutterBottom>
+                                                    <strong>Total Cost:</strong> ₹{order.cost}
                                                 </Typography>
-                                                <Typography sx={{ width: '15%', flexShrink: 0 }} variant="h6" hidden={status[index] === 3 || status[index] === 4 || status[index] === 5 ? true : false}>
-                                                    <Fab sx={{
-                                                        position: 'absolute',
-                                                        right: 180,
-                                                        top: 0,
-                                                        color: 'common.white',
-                                                        bgcolor: lightBlue[400],
-                                                        '&:hover': {
-                                                            bgcolor: lightBlue[600]
-                                                        },
-                                                        width: '15%',
-                                                        height: '60%',
-                                                        fontSize: '1rem',
-                                                    }} aria-label={"Next"} variant="extended" onClick={(e) => moveToNextStage(e, order, index)} >
-                                                        <NavigateNextIcon sx={{ mr: 0 }} />
-                                                        Move To Next Stage
-                                                    </Fab>
+                                                <Typography variant="body1" gutterBottom>
+                                                    <strong>Placed At:</strong> {new Date(order.placedTime).toLocaleString()}
                                                 </Typography>
-                                                <Typography sx={{ width: '5%', flexShrink: 0 }} variant="h6" hidden={status[index] === 0 ? false : true}>
-                                                    <Fab sx={{
-                                                        position: 'absolute',
-                                                        right: 80,
-                                                        top: 7,
-                                                        color: 'common.white',
-                                                        bgcolor: red[700],
-                                                        '&:hover': {
-                                                            bgcolor: red[900]
-                                                        }
-                                                    }} aria-label={"Reject"} onClick={(e) => rejectOrder(e, order, index)} >
-                                                        <ClearIcon sx={{ mr: 0 }} />
-                                                    </Fab>
-                                                </Typography>
-                                            </Stack>
-                                            <Stack spacing={2} direction="row">
-                                                <Typography sx={{ width: '10%', flexShrink: 0 }} variant="h5">
-                                                    Addons :
-                                                </Typography>
-                                                {printAddons(order.addons)}
-                                            </Stack>
-                                        </Stack>
-                                    </Typography>
+                                            </Box>
+                                            
+                                            {order.addons && order.addons.length > 0 && (
+                                                <Box sx={{ mb: 2 }}>
+                                                    <Typography variant="body1" gutterBottom>
+                                                        <strong>Add-ons:</strong>
+                                                    </Typography>
+                                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                                        {printAddons(order.addons)}
+                                                    </Box>
+                                                </Box>
+                                            )}
 
-                                </ListItem>
-                            </Stack>
-                        </div>
+                                            {/* Action Buttons */}
+                                            <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                                                {order.status === 'PLACED' && (
+                                                    <>
+                                                        <Button
+                                                            variant="contained"
+                                                            color="primary"
+                                                            onClick={(e) => moveToNextStage(e, order, actualIndex)}
+                                                        >
+                                                            Accept Order
+                                                        </Button>
+                                                        <Button
+                                                            variant="contained"
+                                                            color="error"
+                                                            onClick={(e) => rejectOrder(e, order, actualIndex)}
+                                                        >
+                                                            Reject Order
+                                                        </Button>
+                                                    </>
+                                                )}
+                                                
+                                                {(['ACCEPTED', 'COOKING'].includes(order.status)) && (
+                                                    <Button
+                                                        variant="contained"
+                                                        color="primary"
+                                                        onClick={(e) => moveToNextStage(e, order, actualIndex)}
+                                                    >
+                                                        {getNextStatusAction(order.status)}
+                                                    </Button>
+                                                )}
+
+                                                {order.status === 'READY FOR PICKUP' && (
+                                                    <Button
+                                                        variant="contained"
+                                                        color="success"
+                                                        onClick={(e) => moveToNextStage(e, order, actualIndex)}
+                                                    >
+                                                        Mark as Completed
+                                                    </Button>
+                                                )}
+                                            </Box>
+
+                                            {/* Quick Status Update */}
+                                            {!['COMPLETED', 'REJECTED'].includes(order.status) && (
+                                                <Box sx={{ mt: 2 }}>
+                                                    <Typography variant="body2" gutterBottom>
+                                                        Quick status update:
+                                                    </Typography>
+                                                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                                                        <Select
+                                                            value={order.status}
+                                                            onChange={(e) => updateOrderStatus(order._id, e.target.value)}
+                                                        >
+                                                            <MenuItem value="PLACED">Placed</MenuItem>
+                                                            <MenuItem value="ACCEPTED">Accepted</MenuItem>
+                                                            <MenuItem value="COOKING">Cooking</MenuItem>
+                                                            <MenuItem value="READY FOR PICKUP">Ready for Pickup</MenuItem>
+                                                            <MenuItem value="COMPLETED">Completed</MenuItem>
+                                                            <MenuItem value="REJECTED">Rejected</MenuItem>
+                                                        </Select>
+                                                    </FormControl>
+                                                </Box>
+                                            )}
+                                        </Paper>
+                                    </Grid>
+                                    
+                                    <Grid item xs={12} md={6}>
+                                        <OrderTracker order={order} />
+                                    </Grid>
+                                </Grid>
+                            </AccordionDetails>
+                        </Accordion>
                     );
                 })
-            }
+            )}
+            
             <Snackbar open={open} autoHideDuration={3000} onClose={handleClose}>
                 <Alert onClose={handleClose} severity="success" sx={{ width: '100%' }}>
-                    Order Rated Successfully!
+                    Order Status Updated Successfully!
                 </Alert>
             </Snackbar>
             <Snackbar open={erropen} autoHideDuration={3000} onClose={handleerrClose}>
@@ -552,16 +790,58 @@ const VendorOrder = () => {
                     No Space Available! Move other orders beyond cooking stage first
                 </Alert>
             </Snackbar>
-        </div >
+        </Box>
     );
 }
 
 
 const Orders = () => {
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchUserData = async () => {
+            try {
+                setLoading(true);
+                const profileResult = await getUserProfile();
+                if (profileResult.success) {
+                    setUser(profileResult.user);
+                } else {
+                    console.error("Failed to fetch user profile");
+                }
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (isAuthenticated()) {
+            fetchUserData();
+        } else {
+            setLoading(false);
+        }
+    }, []);
+
+    if (loading) {
+        return (
+            <Typography variant="h4" align="center" gutterBottom>
+                Loading...
+            </Typography>
+        );
+    }
+
+    if (!user) {
+        return (
+            <Typography variant="h4" align="center" gutterBottom>
+                Please log in to access this page.
+            </Typography>
+        );
+    }
 
     return (
         <div>
-            {localStorage.getItem("userType") === "Buyer" ? <BuyerOrder /> : <VendorOrder />}
+            {user.userType === "Buyer" ? <BuyerOrder /> : <VendorOrder />}
         </div>
     );
 }
