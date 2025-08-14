@@ -24,6 +24,8 @@ export const API_ENDPOINTS = {
   // Food endpoints
   FOOD_ITEMS: `${API_BASE_URL}/food/fooditems`,
   ADD_FOOD_ITEM: `${API_BASE_URL}/food/addfooditems`,
+  UPDATE_FOOD_ITEM: `${API_BASE_URL}/food/updatefooditem`,
+  DELETE_FOOD_ITEM: `${API_BASE_URL}/food/deletefooditem`,
   UPDATE_FOOD_RATING: `${API_BASE_URL}/food/updaterating`,
   
   // Cart endpoints

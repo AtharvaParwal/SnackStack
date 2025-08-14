@@ -1,6 +1,6 @@
 import { useState, useEffect, forwardRef } from "react";
 import axios from "axios";
-import { getUserProfile } from "../../utils/auth";
+import { getUserProfile, triggerBalanceRefresh } from "../../utils/auth";
 import { API_ENDPOINTS } from "../../config/api";
 import Grid from "@mui/material/Grid";
 import TextField from "@mui/material/TextField";
@@ -106,11 +106,8 @@ const Wallet = (props) => {
             setValue("");
             setErrorMessage("");
             
-            // Update navbar balance if element exists
-            const balNavElement = document.getElementById('BalNav');
-            if (balNavElement) {
-                balNavElement.textContent = response.data.balance;
-            }
+            // Trigger balance refresh in Navbar
+            triggerBalanceRefresh();
             
         } catch (error) {
             console.error("Error adding money:", error);

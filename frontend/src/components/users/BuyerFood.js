@@ -1,6 +1,6 @@
 import { useState, useEffect, forwardRef } from "react";
 import axios from "axios";
-import { getUserProfile, isAuthenticated } from "../../utils/auth";
+import { getUserProfile, triggerBalanceRefresh, isAuthenticated } from "../../utils/auth";
 import { API_ENDPOINTS } from "../../config/api";
 import Paper from "@mui/material/Paper";
 import Grid from "@mui/material/Grid";
@@ -785,11 +785,8 @@ const BuyerFood = (props) => {
       const subtractResponse = await axios.post(API_ENDPOINTS.API_BASE_URL + "/wallet/subtractbalance", { amount: total });
       console.log("Balance updated:", subtractResponse.data);
       
-      // Update navbar balance if element exists
-      const balNavElement = document.getElementById('BalNav');
-      if (balNavElement) {
-        balNavElement.textContent = subtractResponse.data.balance;
-      }
+      // Trigger balance refresh in Navbar
+      triggerBalanceRefresh();
       
       setOpen(true);
       

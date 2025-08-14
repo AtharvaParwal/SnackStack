@@ -149,3 +149,12 @@ export default {
   verifyToken,
   updateProfile
 };
+
+// Utility function to trigger balance refresh in Navbar
+export const triggerBalanceRefresh = () => {
+  // Dispatch a custom event to notify Navbar
+  window.dispatchEvent(new CustomEvent('balanceUpdated'));
+  
+  // Also set a localStorage flag as backup
+  localStorage.setItem('balanceUpdated', Date.now().toString());
+};

@@ -52,7 +52,7 @@ router.get("/vendor/:canteen", async (req, res) => {
 });
 
 // Add food item (Vendor only)
-router.post("/addfooditems", verifyToken, verifyUserType('vendor'), async (req, res) => {
+router.post("/addfooditems", verifyToken, verifyUserType(['Vendor']), async (req, res) => {
     try {
         const newFood = new FoodItem({
             name: req.body.name,
@@ -74,7 +74,7 @@ router.post("/addfooditems", verifyToken, verifyUserType('vendor'), async (req, 
 });
 
 // Update food item (Vendor only)
-router.post("/updatefooditem", verifyToken, verifyUserType('vendor'), async (req, res) => {
+router.post("/updatefooditem", verifyToken, verifyUserType(['Vendor']), async (req, res) => {
     try {
         const updated = await FoodItem.findByIdAndUpdate(
             req.body._id,
@@ -98,14 +98,32 @@ router.post("/updatefooditem", verifyToken, verifyUserType('vendor'), async (req
 });
 
 // Delete food item (Vendor only)
-router.post("/deletefooditem", verifyToken, verifyUserType('vendor'), async (req, res) => {
+router.post("/deletefooditem", verifyToken, verifyUserType(['Vendor']), async (req, res) => {
     try {
-        const deleted = await FoodItem.findByIdAndDelete(req.body._id);
-        if (!deleted) return res.status(404).json({ error: "Food item not found" });
+        console.log("Delete request received");
+        console.log("Request body:", req.body);
+        console.log("User from token:", req.user);
+        
+        const itemId = req.body._id;
+        if (!itemId) {
+            console.log("No _id provided in request body");
+            return res.status(400).json({ error: "Food item ID is required" });
+        }
+        
+        console.log("Attempting to delete food item with ID:", itemId);
+        const deleted = await FoodItem.findByIdAndDelete(itemId);
+        
+        if (!deleted) {
+            console.log("Food item not found for ID:", itemId);
+            return res.status(404).json({ error: "Food item not found" });
+        }
+        
+        console.log("Food item deleted successfully:", deleted);
         res.json(deleted);
     } catch (err) {
-        console.error(err);
-        res.status(400).json({ error: err.message });
+        console.error("Error in delete route:", err);
+        console.error("Error stack:", err.stack);
+        res.status(500).json({ error: err.message });
     }
 });
 

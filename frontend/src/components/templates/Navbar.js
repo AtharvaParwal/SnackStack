@@ -28,6 +28,7 @@ const Navbar = () => {
   const [balance, setBalance] = useState(0);
   const [notifications, setNotifications] = useState(0);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
   
   const isLoggedIn = isAuthenticated();
   const userType = localStorage.getItem("userType");
@@ -42,14 +43,98 @@ const Navbar = () => {
     }
   }, [isLoggedIn, userType]);
 
+  // Refresh balance when user navigates or when window gets focus
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && isLoggedIn && userType === "Buyer") {
+        fetchWalletBalance();
+      }
+    };
+
+    const handleFocus = () => {
+      if (isLoggedIn && userType === "Buyer") {
+        fetchWalletBalance();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [isLoggedIn, userType]);
+
+  // Listen for balance updates from other components
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'balanceUpdated' && isLoggedIn && userType === "Buyer") {
+        fetchWalletBalance();
+        // Remove the trigger
+        localStorage.removeItem('balanceUpdated');
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for custom events in the same window
+    const handleCustomBalanceUpdate = () => {
+      if (isLoggedIn && userType === "Buyer") {
+        fetchWalletBalance();
+      }
+    };
+
+    window.addEventListener('balanceUpdated', handleCustomBalanceUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('balanceUpdated', handleCustomBalanceUpdate);
+    };
+  }, [isLoggedIn, userType]);
+
   const fetchWalletBalance = async () => {
+    if (balanceLoading) return; // Prevent multiple simultaneous requests
+    
     try {
-      // Use the protected endpoint
-      const response = await axios.get(API_ENDPOINTS.GET_BALANCE);
-      setBalance(response.data.balance || 0);
+      setBalanceLoading(true);
+      
+      // Ensure we have a valid token
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        console.log("No auth token found");
+        setBalance(0);
+        return;
+      }
+
+      console.log("Fetching wallet balance...");
+      
+      // Use the protected endpoint with explicit headers
+      const response = await axios.get(API_ENDPOINTS.GET_BALANCE, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log("Wallet balance response:", response.data);
+      const newBalance = response.data.balance || 0;
+      setBalance(newBalance);
+      console.log("Balance updated to:", newBalance);
     } catch (error) {
       console.log("Error fetching wallet balance:", error);
-      setBalance(0);
+      console.log("Error response:", error.response?.data);
+      
+      // If it's a 401 error, the token might be invalid
+      if (error.response?.status === 401) {
+        console.log("Authentication failed - token might be invalid");
+        // Don't logout automatically from navbar, just set balance to 0
+        setBalance(0);
+      } else {
+        setBalance(0);
+      }
+    } finally {
+      setBalanceLoading(false);
     }
   };
 
@@ -159,12 +244,21 @@ const Navbar = () => {
       {isLoggedIn && userType === "Buyer" && (
         <Button 
           color="inherit" 
-          onClick={() => navigate("/wallet")}
+          onClick={() => {
+            fetchWalletBalance(); // Refresh balance when clicked
+            navigate("/wallet");
+          }}
           startIcon={<CurrencyRupeeIcon />}
           endIcon={<AccountBalanceWalletIcon />}
+          sx={{ 
+            minWidth: 'auto',
+            '&:hover': {
+              backgroundColor: 'rgba(255, 255, 255, 0.1)'
+            }
+          }}
         >
-          <Box component="span" id="BalNav" sx={{ mx: 1 }}>
-            {balance}
+          <Box component="span" id="BalNav" sx={{ mx: 1, fontWeight: 'bold' }}>
+            {balanceLoading ? "..." : `₹${balance.toFixed(2)}`}
           </Box>
         </Button>
       )}
@@ -222,8 +316,11 @@ const Navbar = () => {
               Profile
             </MenuItem>
             {userType === "Buyer" && (
-              <MenuItem onClick={() => handleNavigate("/wallet")}>
-                Wallet: ₹{balance}
+              <MenuItem onClick={() => {
+                fetchWalletBalance(); // Refresh balance when clicked
+                handleNavigate("/wallet");
+              }}>
+                Wallet: {balanceLoading ? "Loading..." : `₹${balance.toFixed(2)}`}
               </MenuItem>
             )}
             <MenuItem onClick={() => logout()}>

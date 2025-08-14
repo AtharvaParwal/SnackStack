@@ -167,6 +167,7 @@ class EmailNotificationService {
         }
     }
 
+    /*
     static async sendVendorNotification(vendorData, orderData) {
         try {
             const transporter = createGmailTransporter();
@@ -233,6 +234,7 @@ class EmailNotificationService {
             return { success: false, error: err.message };
         }
     }
+    */
 
     static async sendPaymentNotification(email, amount, type = 'debit') {
         try {
@@ -328,6 +330,8 @@ function sendOrderNotifications(req, res, next) {
                     if (req.route.path === '/placeorder' && req.method === 'POST') {
                         await EmailNotificationService.sendOrderConfirmation(data);
                         
+                        // COMMENTED OUT: Vendor email notifications disabled - only buyers receive emails
+                        /*
                         // Also notify vendor if we have vendor data
                         if (req.validationData && req.validationData.vendor) {
                             await EmailNotificationService.sendVendorNotification(
@@ -335,6 +339,7 @@ function sendOrderNotifications(req, res, next) {
                                 data
                             );
                         }
+                        */
                     } else if (req.route.path === '/updatestatus' && req.method === 'POST') {
                         await EmailNotificationService.sendStatusUpdate(data, req.body.status);
                     }

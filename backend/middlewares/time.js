@@ -24,7 +24,6 @@ function check_if_shop_open(open_time, close_time) {
     }
 }
 
-// Get full timestamp with date and time
 function get_current_timestamp() {
     return new Date().toISOString();
 }
@@ -59,7 +58,6 @@ function format_time_12h(time_24h) {
     return `${hour12}:${minute.toString().padStart(2, "0")} ${period}`;
 }
 
-// Get time difference in minutes
 function get_time_difference_minutes(start_time, end_time) {
     const [startHr, startMin] = start_time.split(":").map(Number);
     const [endHr, endMin] = end_time.split(":").map(Number);

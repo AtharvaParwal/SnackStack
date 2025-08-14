@@ -38,6 +38,9 @@ const VendorFood = () => {
     const [addon_name, setAddon_name] = useState("");
     const [addon_price, setAddon_price] = useState("");
     const [tag_name, setTag_name] = useState("");
+    const [deleteConfirm, setDeleteConfirm] = useState(false);
+    const [deleteItemId, setDeleteItemId] = useState("");
+    const [deleteItemName, setDeleteItemName] = useState("");
 
 
     useEffect(() => {
@@ -163,30 +166,56 @@ const VendorFood = () => {
         setTag_name("");
     };
 
-    const onAddItem = (e) => {
+    const onAddItem = async (e) => {
         e.preventDefault();
-        const foodInfo = {
-            name: name,
-            price: price,
-            rating: 0,
-            veg: vegi === "Veg",
-            addon: addon,
-            tags: tags,
-            canteen: canteen
-        };
-        console.log(foodInfo);
-        axios
-            .post(API_ENDPOINTS.API_BASE_URL + "/food/addfooditems", foodInfo)
-            .then((response) => {
-                setAddform(false);
-                setReload(reload + 1);
-
-            })
-            .catch((error) => {
-                console.log(error);
-                alert("Error: Enter Valid Details");
-                setAddform(false);
+        
+        if (!name || !price || !vegi) {
+            alert("Please fill in all required fields (Name, Price, Veg/Non-Veg)");
+            return;
+        }
+        
+        try {
+            // Check if we have auth token
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                alert("Authentication required. Please log in again.");
+                return;
+            }
+            
+            const foodInfo = {
+                name: name,
+                price: parseFloat(price),
+                rating: 0,
+                veg: vegi === "Veg",
+                addon: addon,
+                tags: tags,
+                canteen: canteen
+            };
+            
+            console.log("Adding food item:", foodInfo);
+            const response = await axios.post(API_ENDPOINTS.ADD_FOOD_ITEM, foodInfo, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
             });
+            console.log("Food item added:", response.data);
+            
+            setAddform(false);
+            setReload(reload + 1);
+            
+            // Clear form
+            setName("");
+            setPrice("");
+            setVegi("");
+            setAddon([]);
+            setTags([]);
+            
+        } catch (error) {
+            console.error("Error adding food item:", error);
+            alert("Error: " + (error.response?.data?.error || "Failed to add food item. Please check your details."));
+            setAddform(false);
+        }
     };
 
 
@@ -201,7 +230,6 @@ const VendorFood = () => {
         setVegi("");
         setAddon([]);
         setTags([]);
-        setAddform(true);
         setAddon_name("");
         setAddon_price("");
         setTag_name("");
@@ -225,52 +253,152 @@ const VendorFood = () => {
 
 
 
-    const onSaveVendor = (e) => {
+    const onSaveVendor = async (e) => {
         e.preventDefault();
-        const data = {
-            _id: id,
-            name: name,
-            price: price,
-            rating: rating,
-            veg: vegi === "Veg" ? true : false,
-            addon: addon,
-            tags: tags,
-            canteen: canteen
-        };
-        console.log(data);
-        axios
-            .post(API_ENDPOINTS.API_BASE_URL + "/food/updatefooditem", data)
-            .then((response) => {
-                console.log(response);
-                setReload(reload + 1);
+        
+        if (!name || !price || !vegi) {
+            alert("Please fill in all required fields (Name, Price, Veg/Non-Veg)");
+            return;
+        }
+        
+        try {
+            // Check if we have auth token
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                alert("Authentication required. Please log in again.");
+                return;
             }
-            )
-            .catch((error) => {
-                console.log(error);
-            }
-            );
-    }
-
-    const onDelete = (e, ID) => {
-        e.preventDefault();
-        const data = {
-            _id: ID
-        };
-        axios
-            .post(API_ENDPOINTS.API_BASE_URL + "/food/deletefooditem", data)
-            .then((response) => {
-                console.log(response);
-                setReload(reload + 1);
-            })
-            .catch((error) => {
-                console.log(error);
+            
+            const data = {
+                _id: id,
+                name: name,
+                price: parseFloat(price),
+                rating: rating,
+                veg: vegi === "Veg" ? true : false,
+                addon: addon,
+                tags: tags,
+                canteen: canteen
+            };
+            
+            console.log("Updating food item:", data);
+            const response = await axios.post(API_ENDPOINTS.UPDATE_FOOD_ITEM, data, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
             });
-    }
+            console.log("Food item updated:", response.data);
+            
+            setReload(reload + 1);
+            
+        } catch (error) {
+            console.error("Error updating food item:", error);
+            alert("Error: " + (error.response?.data?.error || "Failed to update food item."));
+        }
+    };
+
+    const onDelete = (e, ID, itemName) => {
+        e.preventDefault();
+        setDeleteItemId(ID);
+        setDeleteItemName(itemName);
+        setDeleteConfirm(true);
+    };
+
+    const confirmDelete = async () => {
+        try {
+            // Check if we have auth token
+            const token = localStorage.getItem('authToken');
+            const userType = localStorage.getItem('userType');
+            
+            console.log("Auth token exists:", !!token);
+            console.log("User type:", userType);
+            
+            if (!token) {
+                alert("Authentication required. Please log in again.");
+                return;
+            }
+            
+            const data = {
+                _id: deleteItemId
+            };
+            
+            console.log("Deleting food item with ID:", deleteItemId);
+            console.log("Delete endpoint:", API_ENDPOINTS.DELETE_FOOD_ITEM);
+            console.log("Request payload:", data);
+            
+            // Make the request
+            const response = await axios.post(API_ENDPOINTS.DELETE_FOOD_ITEM, data, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            console.log("Delete successful, response:", response.data);
+            alert("Food item deleted successfully!");
+            
+            setDeleteConfirm(false);
+            setDeleteItemId("");
+            setDeleteItemName("");
+            setReload(reload + 1);
+            
+        } catch (error) {
+            console.error("Full error object:", error);
+            console.error("Error message:", error.message);
+            console.error("Error response:", error.response);
+            console.error("Error response data:", error.response?.data);
+            console.error("Error response status:", error.response?.status);
+            console.error("Error response headers:", error.response?.headers);
+            
+            let errorMessage = "Error deleting item. Please try again.";
+            
+            if (error.response) {
+                const status = error.response.status;
+                const errorData = error.response.data;
+                
+                console.log(`HTTP Status: ${status}`);
+                console.log(`Error Data:`, errorData);
+                
+                if (status === 401) {
+                    errorMessage = "Authentication failed. Please log in again.";
+                } else if (status === 403) {
+                    errorMessage = "Access denied. Only vendors can delete items.";
+                } else if (status === 404) {
+                    errorMessage = "Food item not found.";
+                } else if (errorData?.error) {
+                    errorMessage = errorData.error;
+                } else {
+                    errorMessage = `Server error: ${status}`;
+                }
+            } else if (error.request) {
+                console.error("No response received:", error.request);
+                errorMessage = "Network error. Please check your connection.";
+            } else {
+                console.error("Error setting up request:", error.message);
+                errorMessage = "Request setup error: " + error.message;
+            }
+            
+            alert(errorMessage);
+            setDeleteConfirm(false);
+        }
+    };
+
+    const cancelDelete = () => {
+        setDeleteConfirm(false);
+        setDeleteItemId("");
+        setDeleteItemName("");
+    };
 
     const onAddAddon = (e, name, price) => {
         e.preventDefault();
+        
+        if (!name || !price || parseFloat(price) <= 0) {
+            alert("Please enter valid addon name and price");
+            return;
+        }
+        
         let newAddon = [...addon];
-        newAddon.push({ addon: name, price: price });
+        newAddon.push({ addon: name, price: parseFloat(price) });
         setAddon(newAddon);
         setAddon_name("");
         setAddon_price("");
@@ -278,8 +406,20 @@ const VendorFood = () => {
 
     const onAddTag = (e, tag) => {
         e.preventDefault();
+        
+        if (!tag || tag.trim() === "") {
+            alert("Please enter a valid tag");
+            return;
+        }
+        
+        // Check if tag already exists
+        if (tags.includes(tag.trim())) {
+            alert("This tag already exists");
+            return;
+        }
+        
         let newTags = [...tags];
-        newTags.push(tag);
+        newTags.push(tag.trim());
         setTags(newTags);
         setTag_name("");
     };
@@ -359,7 +499,7 @@ const VendorFood = () => {
                                             '&:hover': {
                                                 bgcolor: red[600]
                                             }
-                                        }} onClick={(e) => onDelete(e, food._id)} > <DeleteOutlineIcon /> </Fab>
+                                        }} onClick={(e) => onDelete(e, food._id, food.name)} > <DeleteOutlineIcon /> </Fab>
                                     </Typography>
 
                                 </ListItem>
@@ -506,6 +646,48 @@ const VendorFood = () => {
                     </Button>
                     <Button onClick={() => { closeAddForm(); }} color="primary" autoFocus>
                         Cancel
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog
+                open={deleteConfirm}
+                onClose={cancelDelete}
+                aria-labelledby="delete-dialog-title"
+                aria-describedby="delete-dialog-description"
+            >
+                <DialogTitle id="delete-dialog-title" sx={{ color: red[600] }}>
+                    ⚠️ Confirm Deletion
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText id="delete-dialog-description">
+                        Are you sure you want to delete <strong>"{deleteItemName}"</strong>?
+                        <br /><br />
+                        This action cannot be undone and will permanently remove this food item from your menu.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button 
+                        onClick={cancelDelete} 
+                        color="primary" 
+                        variant="outlined"
+                    >
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={confirmDelete} 
+                        sx={{
+                            bgcolor: red[400],
+                            color: 'white',
+                            '&:hover': {
+                                bgcolor: red[600]
+                            }
+                        }}
+                        variant="contained"
+                        autoFocus
+                    >
+                        Delete
                     </Button>
                 </DialogActions>
             </Dialog>
